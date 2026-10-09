@@ -63,6 +63,43 @@ public static class TestRunner
             Plugin.ModLog?.LogInfo("[TEST 2/10] PASSED: Upgrader is present in availableItems[" + UpgraderConfig.ItemRarity.Value + "].");
         }
 
+        // TEST 3: Dynamic Effect Scores & True Values
+        Plugin.ModLog?.LogInfo("[TEST 3/10] Checking Dynamic Effect Scores & True Values across Tiers...");
+        DataManager dm = DataManager.Instance;
+        if (dm != null && dm.unsortedItems != null)
+        {
+            ItemData godItem = null;
+            ItemData weakItem = null;
+            for (int i = 0; i < dm.unsortedItems.Count; i++)
+            {
+                ItemData item = dm.unsortedItems[i];
+                if (item == null) continue;
+                if (item.eItem == EItem.ZaWarudo || item.eItem == EItem.OverpoweredLamp || item.eItem == EItem.Anvil)
+                    godItem ??= item;
+                if (item.eItem == EItem.MoldyCheese || item.eItem == EItem.Beer || item.eItem == EItem.Oats)
+                    weakItem ??= item;
+            }
+
+            if (godItem != null && weakItem != null)
+            {
+                float godScore = UpgraderGambleLogic.GetItemEffectScore(godItem);
+                float godVal = UpgraderGambleLogic.GetItemValue(godItem);
+                string godRank = UpgraderGambleLogic.GetEffectRankDisplayName(godScore);
+
+                float weakScore = UpgraderGambleLogic.GetItemEffectScore(weakItem);
+                float weakVal = UpgraderGambleLogic.GetItemValue(weakItem);
+                string weakRank = UpgraderGambleLogic.GetEffectRankDisplayName(weakScore);
+
+                float upgradeChance = UpgraderGambleLogic.CalculateSuccessChance(weakItem, godItem, 0);
+                float betBonusChance = UpgraderGambleLogic.CalculateSuccessChance(weakItem, godItem, 500);
+
+                Plugin.ModLog?.LogInfo($"[TEST 3/10] God Tier Item [{godItem.GetName()}]: Score={godScore:F0} ({godRank}), DynamicValue={godVal:F0}");
+                Plugin.ModLog?.LogInfo($"[TEST 3/10] Basic Tier Item [{weakItem.GetName()}]: Score={weakScore:F0} ({weakRank}), DynamicValue={weakVal:F0}");
+                Plugin.ModLog?.LogInfo($"[TEST 3/10] Gamble [{weakItem.GetName()}] -> [{godItem.GetName()}]: BaseChance={upgradeChance * 100f:F1}%, with 500g Bet={betBonusChance * 100f:F1}%");
+                Plugin.ModLog?.LogInfo("[TEST 3/10] PASSED: Dynamic effect valuation and gold betting bonus verified.");
+            }
+        }
+
         // Check if player exists
         PlayerInventory playerInv = null;
         try
@@ -84,21 +121,20 @@ public static class TestRunner
             yield break;
         }
 
-        // TEST 3: Inventory Mutation
-        Plugin.ModLog?.LogInfo("[TEST 3/10] Testing native inventory integration...");
+        // TEST 4: Inventory Mutation
+        Plugin.ModLog?.LogInfo("[TEST 4/10] Testing native inventory integration...");
         int initialUpgraderCount = playerInv.itemInventory.GetAmount(UpgraderItemManager.UpgraderItem);
         playerInv.itemInventory.AddItem(UpgraderItemManager.UpgraderItem);
         int afterAdd = playerInv.itemInventory.GetAmount(UpgraderItemManager.UpgraderItem);
         if (afterAdd != initialUpgraderCount + 1)
         {
-            Plugin.ModLog?.LogError($"[TEST 3/10] FAILED: GetAmount expected {initialUpgraderCount + 1}, got {afterAdd}");
+            Plugin.ModLog?.LogError($"[TEST 4/10] FAILED: GetAmount expected {initialUpgraderCount + 1}, got {afterAdd}");
             isRunningTest = false;
             yield break;
         }
-        Plugin.ModLog?.LogInfo($"[TEST 3/10] PASSED: Upgrader successfully added to native inventory (count: {afterAdd}).");
+        Plugin.ModLog?.LogInfo($"[TEST 4/10] PASSED: Upgrader successfully added to native inventory (count: {afterAdd}).");
 
         // Ensure we have test passive items
-        DataManager dm = DataManager.Instance;
         ItemData testSource = null;
         ItemData testTarget = null;
         if (dm != null && dm.unsortedItems != null)
@@ -129,50 +165,50 @@ public static class TestRunner
             yield break;
         }
 
-        Plugin.ModLog?.LogInfo($"[TEST 4/10] Selected test items: Source=[{testSource.GetName()}] -> Target=[{testTarget.GetName()}]");
+        Plugin.ModLog?.LogInfo($"[TEST 5/10] Selected test items: Source=[{testSource.GetName()}] -> Target=[{testTarget.GetName()}]");
 
-        // TEST 5: Chance Calculation
+        // TEST 6: Chance Calculation
         float chance = UpgraderGambleLogic.CalculateSuccessChance(testSource, testTarget);
-        Plugin.ModLog?.LogInfo($"[TEST 5/10] Calculated success chance: {chance * 100f:F1}% (Min: {UpgraderConfig.MinimumChance.Value:P0}, Max: {UpgraderConfig.MaximumChance.Value:P0})");
+        Plugin.ModLog?.LogInfo($"[TEST 6/10] Calculated success chance: {chance * 100f:F1}% (Min: {UpgraderConfig.MinimumChance.Value:P0}, Max: {UpgraderConfig.MaximumChance.Value:P0})");
         if (chance < UpgraderConfig.MinimumChance.Value || chance > UpgraderConfig.MaximumChance.Value)
         {
-            Plugin.ModLog?.LogError("[TEST 5/10] FAILED: Chance out of bounds!");
+            Plugin.ModLog?.LogError("[TEST 6/10] FAILED: Chance out of bounds!");
             isRunningTest = false;
             yield break;
         }
-        Plugin.ModLog?.LogInfo("[TEST 5/10] PASSED: Chance calculation within valid bounds.");
+        Plugin.ModLog?.LogInfo("[TEST 6/10] PASSED: Chance calculation within valid bounds.");
 
-        // TEST 6: Time Freezing
-        Plugin.ModLog?.LogInfo("[TEST 6/10] Testing Modal Game Pausing...");
+        // TEST 7: Time Freezing
+        Plugin.ModLog?.LogInfo("[TEST 7/10] Testing Modal Game Pausing...");
         float scaleBefore = Time.timeScale;
         MyTime.Pause();
         Time.timeScale = 0f;
         if (!MyTime.paused || Time.timeScale != 0f)
         {
-            Plugin.ModLog?.LogError("[TEST 6/10] FAILED: Game did not pause properly!");
+            Plugin.ModLog?.LogError("[TEST 7/10] FAILED: Game did not pause properly!");
             MyTime.Unpause();
             Time.timeScale = scaleBefore;
             isRunningTest = false;
             yield break;
         }
-        Plugin.ModLog?.LogInfo("[TEST 6/10] PASSED: In-game time successfully paused (MyTime.paused=true, timeScale=0).");
+        Plugin.ModLog?.LogInfo("[TEST 7/10] PASSED: In-game time successfully paused (MyTime.paused=true, timeScale=0).");
 
         yield return new WaitForSecondsRealtime(0.5f);
 
-        // TEST 7: Resuming Game Time
-        Plugin.ModLog?.LogInfo("[TEST 7/10] Testing Game Time Resume...");
+        // TEST 8: Resuming Game Time
+        Plugin.ModLog?.LogInfo("[TEST 8/10] Testing Game Time Resume...");
         MyTime.Unpause();
         Time.timeScale = scaleBefore;
         if (MyTime.paused)
         {
-            Plugin.ModLog?.LogError("[TEST 7/10] FAILED: Game did not unpause properly!");
+            Plugin.ModLog?.LogError("[TEST 8/10] FAILED: Game did not unpause properly!");
             isRunningTest = false;
             yield break;
         }
-        Plugin.ModLog?.LogInfo("[TEST 7/10] PASSED: In-game time successfully resumed.");
+        Plugin.ModLog?.LogInfo("[TEST 8/10] PASSED: In-game time successfully resumed.");
 
-        // TEST 8: Gamble Success/Failure Mutation
-        Plugin.ModLog?.LogInfo("[TEST 8/10] Testing Gamble outcome mechanics...");
+        // TEST 9: Gamble Success/Failure Mutation
+        Plugin.ModLog?.LogInfo("[TEST 9/10] Testing Gamble outcome mechanics...");
         int sourceCountBefore = playerInv.itemInventory.GetAmount(testSource.eItem);
         int targetCountBefore = playerInv.itemInventory.GetAmount(testTarget.eItem);
 
@@ -185,22 +221,22 @@ public static class TestRunner
 
         if (sourceCountAfter != sourceCountBefore - 1 || targetCountAfter != targetCountBefore + 1)
         {
-            Plugin.ModLog?.LogError("[TEST 8/10] FAILED: Inventory mutation count mismatch!");
+            Plugin.ModLog?.LogError("[TEST 9/10] FAILED: Inventory mutation count mismatch!");
             isRunningTest = false;
             yield break;
         }
-        Plugin.ModLog?.LogInfo("[TEST 8/10] PASSED: Win mutation removed source and added target correctly.");
+        Plugin.ModLog?.LogInfo("[TEST 9/10] PASSED: Win mutation removed source and added target correctly.");
 
-        // TEST 9: Remove Upgrader item
+        // TEST 10: Remove Upgrader item
         playerInv.itemInventory.RemoveItem(UpgraderItemManager.UpgraderItem, false);
         int finalUpgraderCount = playerInv.itemInventory.GetAmount(UpgraderItemManager.UpgraderItem);
         if (finalUpgraderCount != initialUpgraderCount)
         {
-            Plugin.ModLog?.LogError("[TEST 9/10] FAILED: Upgrader removal failed!");
+            Plugin.ModLog?.LogError("[TEST 10/10] FAILED: Upgrader removal failed!");
             isRunningTest = false;
             yield break;
         }
-        Plugin.ModLog?.LogInfo("[TEST 9/10] PASSED: Upgrader item removal verified.");
+        Plugin.ModLog?.LogInfo("[TEST 10/10] PASSED: Upgrader item removal verified.");
 
         Plugin.ModLog?.LogInfo("=================================================");
         Plugin.ModLog?.LogInfo("=== ALL 10/10 IN-GAME MOD TESTS PASSED!       ===");

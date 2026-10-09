@@ -73,6 +73,8 @@ public sealed class UpgraderBehaviour : MonoBehaviour
     private GUIStyle statusLabelStyle;
     private GUIStyle badgeStyle;
     private GUIStyle tagStyle;
+    private GUIStyle centerSubtitleStyle;
+    private GUIStyle centerColumnTitleStyle;
 
     private void Awake()
     {
@@ -834,18 +836,33 @@ public sealed class UpgraderBehaviour : MonoBehaviour
                 GUI.DrawTexture(new Rect(iconFrame.x + 3f, iconFrame.y + 3f, 34f, 34f), icon);
             }
 
-            // Draw Name and Rarity
-            GUI.color = isSelected ? new Color(1f, 0.90f, 0.35f) : rarityColor;
-            GUI.Label(new Rect(rowRect.x + 52f, rowRect.y + 4f, rowRect.width - 190f, 20f), it.GetName(), headerStyle);
-            GUI.color = Color.white;
-
-            // Details Line: Nominal vs Dynamic rarity
+            // Details: Nominal vs Dynamic rarity, and Effect Rank
             string rarityName = UpgraderGambleLogic.GetRarityDisplayName(it.rarity);
             float dynVal = UpgraderGambleLogic.GetItemValue(it);
             EItemRarity dynRarity = UpgraderGambleLogic.GetDynamicRarity(it);
             string dynBadge = dynRarity != it.rarity ? $" [★ {UpgraderGambleLogic.GetRarityDisplayName(dynRarity)}]" : string.Empty;
 
-            GUI.Label(new Rect(rowRect.x + 52f, rowRect.y + 25f, 240f, 18f), $"{rarityName}{dynBadge} • Ценность: {dynVal:F0}", subtitleStyle);
+            float effScore = UpgraderGambleLogic.GetItemEffectScore(it);
+            string effRank = UpgraderGambleLogic.GetEffectRankDisplayName(effScore);
+            Color effColor = UpgraderGambleLogic.GetEffectRankColor(effScore);
+            string rankTag = effRank.Split(' ')[0];
+
+            // Effect Rank Pill (e.g. S+, S, A, B, C)
+            float effPillW = 54f;
+            float effPillX = isSource ? rowRect.x + rowRect.width - 124f : rowRect.x + rowRect.width - 138f;
+            Rect effPill = new Rect(effPillX, rowRect.y + 13f, effPillW, 22f);
+            DrawPanel(effPill, new Color(effColor.r * 0.16f, effColor.g * 0.16f, effColor.b * 0.16f, 0.9f), effColor, 1);
+            GUI.color = effColor;
+            GUI.Label(effPill, rankTag, badgeStyle);
+            GUI.color = Color.white;
+
+            // Draw Name and Details
+            float textWidth = effPillX - (rowRect.x + 56f);
+            GUI.color = isSelected ? new Color(1f, 0.90f, 0.35f) : rarityColor;
+            GUI.Label(new Rect(rowRect.x + 52f, rowRect.y + 4f, textWidth, 20f), it.GetName(), headerStyle);
+            GUI.color = Color.white;
+
+            GUI.Label(new Rect(rowRect.x + 52f, rowRect.y + 25f, textWidth, 18f), $"{rarityName}{dynBadge} • Ценность: {dynVal:F0}", subtitleStyle);
 
             // Right side count badge
             int ownedCount = inv != null && inv.itemInventory != null ? inv.itemInventory.GetAmount(it.eItem) : 0;
@@ -961,7 +978,7 @@ public sealed class UpgraderBehaviour : MonoBehaviour
         float goldBonusChance = finalChance - baseChance;
 
         // Title
-        GUI.Label(new Rect(centerRect.x, centerRect.y + 6f, centerRect.width, 20f), "ВЕРОЯТНОСТЬ УЛУЧШЕНИЯ", columnTitleStyle);
+        GUI.Label(new Rect(centerRect.x, centerRect.y + 6f, centerRect.width, 20f), "ВЕРОЯТНОСТЬ УЛУЧШЕНИЯ", centerColumnTitleStyle ?? columnTitleStyle);
 
         if (canRoll)
         {
@@ -979,18 +996,25 @@ public sealed class UpgraderBehaviour : MonoBehaviour
             Rect barFill = new Rect(barBg.x + 2f, barBg.y + 2f, (barBg.width - 4f) * Mathf.Clamp01(finalChance), barBg.height - 4f);
             DrawRect(barFill, chanceColor);
 
-            // Ratio calculation details
+            // Ratio and effect calculation details
             float sVal = UpgraderGambleLogic.GetItemValue(selectedSource);
             float tVal = UpgraderGambleLogic.GetItemValue(selectedTarget);
-            GUI.Label(new Rect(centerRect.x, centerRect.y + 72f, centerRect.width, 18f), $"Ценность: {sVal:F0} -> {tVal:F0} (множитель x{UpgraderConfig.SourceValueMultiplier.Value:F2})", subtitleStyle);
+            float sEff = UpgraderGambleLogic.GetItemEffectScore(selectedSource);
+            float tEff = UpgraderGambleLogic.GetItemEffectScore(selectedTarget);
+            string sRank = UpgraderGambleLogic.GetEffectRankDisplayName(sEff).Split(' ')[0];
+            string tRank = UpgraderGambleLogic.GetEffectRankDisplayName(tEff).Split(' ')[0];
+
+            GUI.Label(new Rect(centerRect.x, centerRect.y + 72f, centerRect.width, 18f),
+                $"Сила: {sEff:F0} [{sRank}] → {tEff:F0} [{tRank}]  •  Ценность: {sVal:F0} → {tVal:F0} (x{UpgraderConfig.SourceValueMultiplier.Value:F2})",
+                centerSubtitleStyle ?? subtitleStyle);
         }
         else
         {
             string selectHint = selectedSource == null
                 ? "← Выберите исходный предмет слева"
                 : "Выберите целевой предмет справа →";
-            GUI.Label(new Rect(centerRect.x, centerRect.y + 36f, centerRect.width, 22f), selectHint, subtitleStyle);
-            GUI.Label(new Rect(centerRect.x, centerRect.y + 58f, centerRect.width, 18f), "Шанс рассчитается автоматически по ценности", subtitleStyle);
+            GUI.Label(new Rect(centerRect.x, centerRect.y + 36f, centerRect.width, 22f), selectHint, centerSubtitleStyle ?? subtitleStyle);
+            GUI.Label(new Rect(centerRect.x, centerRect.y + 58f, centerRect.width, 18f), "Шанс рассчитается по динамической ценности и силе эффектов", centerSubtitleStyle ?? subtitleStyle);
         }
 
         // Gold Betting Controls
@@ -1077,18 +1101,26 @@ public sealed class UpgraderBehaviour : MonoBehaviour
 
             // Name & Rarity
             GUI.color = rarityColor;
-            GUI.Label(new Rect(rect.x + 64f, rect.y + 32f, rect.width - 74f, 22f), item.GetName(), headerStyle);
+            GUI.Label(new Rect(rect.x + 64f, rect.y + 30f, rect.width - 74f, 20f), item.GetName(), headerStyle);
             GUI.color = Color.white;
 
             string rarityName = UpgraderGambleLogic.GetRarityDisplayName(item.rarity);
             float itemVal = UpgraderGambleLogic.GetItemValue(item);
             EItemRarity dynRarity = UpgraderGambleLogic.GetDynamicRarity(item);
-            string dynInfo = dynRarity != item.rarity ? $"★ Истинный: {UpgraderGambleLogic.GetRarityDisplayName(dynRarity)} | " : string.Empty;
+            string dynBadge = dynRarity != item.rarity ? $" [★ {UpgraderGambleLogic.GetRarityDisplayName(dynRarity)}]" : string.Empty;
 
-            GUI.Label(new Rect(rect.x + 64f, rect.y + 54f, rect.width - 74f, 18f), $"{dynInfo}Ценность: {itemVal:F0}", subtitleStyle);
+            float effScore = UpgraderGambleLogic.GetItemEffectScore(item);
+            string effRank = UpgraderGambleLogic.GetEffectRankDisplayName(effScore);
+            Color effColor = UpgraderGambleLogic.GetEffectRankColor(effScore);
+
+            GUI.Label(new Rect(rect.x + 64f, rect.y + 49f, rect.width - 74f, 16f), $"Редкость: {rarityName}{dynBadge} • Ценность: {itemVal:F0}", subtitleStyle);
+
+            GUI.color = effColor;
+            GUI.Label(new Rect(rect.x + 64f, rect.y + 65f, rect.width - 74f, 16f), $"Ранг эффекта: {effRank} (сила {effScore:F0})", subtitleStyle);
+            GUI.color = Color.white;
 
             // Description Box
-            Rect descRect = new Rect(rect.x + 10f, rect.y + 84f, rect.width - 20f, rect.height - 94f);
+            Rect descRect = new Rect(rect.x + 10f, rect.y + 85f, rect.width - 20f, rect.height - 95f);
             DrawPanel(descRect, new Color(0.05f, 0.06f, 0.08f, 0.75f), new Color(0.16f, 0.19f, 0.25f, 0.6f), 1);
 
             string desc = item.GetDescription();
@@ -1248,6 +1280,16 @@ public sealed class UpgraderBehaviour : MonoBehaviour
             fontSize = 11,
             alignment = TextAnchor.MiddleLeft,
             normal = { textColor = new Color(0.72f, 0.76f, 0.82f) }
+        };
+
+        centerColumnTitleStyle = new GUIStyle(columnTitleStyle)
+        {
+            alignment = TextAnchor.MiddleCenter
+        };
+
+        centerSubtitleStyle = new GUIStyle(subtitleStyle)
+        {
+            alignment = TextAnchor.MiddleCenter
         };
 
         headerStyle = new GUIStyle(GUI.skin.label)
