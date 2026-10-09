@@ -15,6 +15,11 @@ public static class UpgraderConfig
     public static ConfigEntry<float> MaximumChance { get; private set; }
     public static ConfigEntry<float> SourceValueMultiplier { get; private set; }
     public static ConfigEntry<float> RollDuration { get; private set; }
+    public static ConfigEntry<float> TickVolumeMultiplier { get; private set; }
+    public static ConfigEntry<bool> UseDynamicRarity { get; private set; }
+    public static ConfigEntry<bool> EnableGoldBetting { get; private set; }
+    public static ConfigEntry<float> MaxGoldChanceBonus { get; private set; }
+    public static ConfigEntry<int> MaxGoldBet { get; private set; }
     public static ConfigEntry<bool> EnableDebugKeys { get; private set; }
     public static ConfigEntry<KeyCode> DebugGrantKey { get; private set; }
     public static ConfigEntry<KeyCode> DebugGrantPassiveKey { get; private set; }
@@ -80,8 +85,43 @@ public static class UpgraderConfig
         RollDuration = config.Bind(
             "Roll",
             "RollDuration",
-            2.5f,
-            new ConfigDescription("Duration of the roulette spin animation in seconds.", new AcceptableValueRange<float>(0.5f, 10.0f))
+            4.2f,
+            new ConfigDescription("Duration of the roulette spin animation in seconds.", new AcceptableValueRange<float>(0.5f, 15.0f))
+        );
+
+        TickVolumeMultiplier = config.Bind(
+            "Roll",
+            "TickVolumeMultiplier",
+            0.10f,
+            new ConfigDescription("Volume multiplier for the roulette tick sound (0.10 = 10% volume).", new AcceptableValueRange<float>(0.01f, 1.0f))
+        );
+
+        UseDynamicRarity = config.Bind(
+            "Roll",
+            "UseDynamicRarity",
+            true,
+            "Calculate real dynamic item value and rarity based on scarcity (maxAmountPerRun) and caps."
+        );
+
+        EnableGoldBetting = config.Bind(
+            "Betting",
+            "EnableGoldBetting",
+            true,
+            "Allow betting in-game gold on the roulette to boost chance and earn gold profit on victory."
+        );
+
+        MaxGoldChanceBonus = config.Bind(
+            "Betting",
+            "MaxGoldChanceBonus",
+            0.15f,
+            new ConfigDescription("Maximum success chance bonus obtainable through gold betting (0.15 = +15%).", new AcceptableValueRange<float>(0.01f, 0.40f))
+        );
+
+        MaxGoldBet = config.Bind(
+            "Betting",
+            "MaxGoldBet",
+            500,
+            new ConfigDescription("Maximum amount of gold that can be wagered in a single gamble.", new AcceptableValueRange<int>(50, 5000))
         );
 
         EnableDebugKeys = config.Bind(
