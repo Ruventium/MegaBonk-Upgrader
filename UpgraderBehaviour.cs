@@ -18,6 +18,7 @@ public sealed class UpgraderBehaviour : MonoBehaviour
     private bool isPausedByMod;
     private float prevTimeScale = 1f;
     private float prevMyTimeScale = 1f;
+    private int framesToLockCursor;
 
     // Item Selections & Filtering
     private ItemData selectedSource;
@@ -150,7 +151,22 @@ public sealed class UpgraderBehaviour : MonoBehaviour
         }
 
         if (!isWindowOpen)
+        {
+            if (framesToLockCursor > 0)
+            {
+                framesToLockCursor--;
+                Cursor.lockState = CursorLockMode.Locked;
+                Cursor.visible = false;
+                try
+                {
+                    WindowManager.RefreshCursor();
+                }
+                catch { }
+            }
             return;
+        }
+
+        framesToLockCursor = 0;
 
         // Ensure cursor is freed during modal window
         Cursor.lockState = CursorLockMode.None;
@@ -287,7 +303,20 @@ public sealed class UpgraderBehaviour : MonoBehaviour
         {
             RestoreGameTime();
         }
-        Plugin.ModLog?.LogInfo("Upgrader modal window closed.");
+
+        if (resumeGame)
+        {
+            framesToLockCursor = 3;
+            Cursor.lockState = CursorLockMode.Locked;
+            Cursor.visible = false;
+            try
+            {
+                WindowManager.RefreshCursor();
+            }
+            catch { }
+        }
+
+        Plugin.ModLog?.LogInfo("Upgrader modal window closed, mouse lock restored.");
     }
 
     private void RestoreGameTime()
