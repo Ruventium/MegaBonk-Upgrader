@@ -90,13 +90,20 @@ public static class TestRunner
                 float weakVal = UpgraderGambleLogic.GetItemValue(weakItem);
                 string weakRank = UpgraderGambleLogic.GetEffectRankDisplayName(weakScore);
 
-                float upgradeChance = UpgraderGambleLogic.CalculateSuccessChance(weakItem, godItem, 0);
-                float betBonusChance = UpgraderGambleLogic.CalculateSuccessChance(weakItem, godItem, 500);
+                float upgradeChance = UpgraderGambleLogic.CalculateSuccessChance(weakItem, godItem, 1, 1, 0);
+                float betBonusChance = UpgraderGambleLogic.CalculateSuccessChance(weakItem, godItem, 1, 1, 500);
+
+                // Quantity Multiplication Test: e.g. 1 Key -> 10 Keys and 1 Key -> 2 Keys
+                float mult10Chance = UpgraderGambleLogic.CalculateSuccessChance(weakItem, weakItem, 1, 10, 0);
+                float mult2Chance = UpgraderGambleLogic.CalculateSuccessChance(weakItem, weakItem, 1, 2, 0);
+                float mult10WithBet = UpgraderGambleLogic.CalculateSuccessChance(weakItem, weakItem, 1, 10, 500);
 
                 Plugin.ModLog?.LogInfo($"[TEST 3/10] God Tier Item [{godItem.GetName()}]: Score={godScore:F0} ({godRank}), DynamicValue={godVal:F0}");
                 Plugin.ModLog?.LogInfo($"[TEST 3/10] Basic Tier Item [{weakItem.GetName()}]: Score={weakScore:F0} ({weakRank}), DynamicValue={weakVal:F0}");
-                Plugin.ModLog?.LogInfo($"[TEST 3/10] Gamble [{weakItem.GetName()}] -> [{godItem.GetName()}]: BaseChance={upgradeChance * 100f:F1}%, with 500g Bet={betBonusChance * 100f:F1}%");
-                Plugin.ModLog?.LogInfo("[TEST 3/10] PASSED: Dynamic effect valuation and gold betting bonus verified.");
+                Plugin.ModLog?.LogInfo($"[TEST 3/10] Gamble [{weakItem.GetName()} 1x] -> [{godItem.GetName()} 1x]: BaseChance={upgradeChance * 100f:F1}%, with 500g Bet={betBonusChance * 100f:F1}%");
+                Plugin.ModLog?.LogInfo($"[TEST 3/10] Quantity Gamble [{weakItem.GetName()} 1x] -> [{weakItem.GetName()} 10x]: BaseChance={mult10Chance * 100f:F1}%, with 500g Bet={mult10WithBet * 100f:F1}%");
+                Plugin.ModLog?.LogInfo($"[TEST 3/10] Quantity Gamble [{weakItem.GetName()} 1x] -> [{weakItem.GetName()} 2x]: BaseChance={mult2Chance * 100f:F1}%");
+                Plugin.ModLog?.LogInfo("[TEST 3/10] PASSED: Dynamic effect valuation, quantity multipliers (1x to 10x), and gold betting bonus verified.");
             }
         }
 

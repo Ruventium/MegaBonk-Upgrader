@@ -24,6 +24,10 @@ public sealed class UpgraderBehaviour : MonoBehaviour
     private ItemData selectedSource;
     private ItemData selectedTarget;
     private int currentGoldBet;
+    private int sourceQuantity = 1;
+    private int targetQuantity = 1;
+    private int rollSourceQuantity = 1;
+    private int rollTargetQuantity = 1;
     private int sourceRarityFilter = -1; // -1 = All, 0 = Common, 1 = Rare, 2 = Epic, 3 = Legendary
     private int targetRarityFilter = -1; // -1 = All, 0 = Common, 1 = Rare, 2 = Epic, 3 = Legendary
 
@@ -309,6 +313,8 @@ public sealed class UpgraderBehaviour : MonoBehaviour
         selectedSource = null;
         selectedTarget = null;
         currentGoldBet = 0;
+        sourceQuantity = 1;
+        targetQuantity = 1;
 
         if (resumeGame && isPausedByMod)
         {
@@ -444,12 +450,15 @@ public sealed class UpgraderBehaviour : MonoBehaviour
             return;
 
         int sourceAmount = inv.itemInventory.GetAmount(selectedSource.eItem);
-        if (sourceAmount <= 0)
+        if (sourceAmount < sourceQuantity)
         {
-            outcomeMessage = "Ошибка: исходный предмет больше не найден в вашем инвентаре!";
+            outcomeMessage = $"Ошибка: требуется {sourceQuantity} шт. исходного предмета, но есть только {sourceAmount}!";
             RefreshLists();
             return;
         }
+
+        rollSourceQuantity = sourceQuantity;
+        rollTargetQuantity = targetQuantity;
 
         // Deduct gold bet if any
         if (currentGoldBet > 0)
@@ -462,7 +471,7 @@ public sealed class UpgraderBehaviour : MonoBehaviour
         }
 
         // Calculate chance and determine outcome
-        float chance = UpgraderGambleLogic.CalculateSuccessChance(selectedSource, selectedTarget, currentGoldBet);
+        float chance = UpgraderGambleLogic.CalculateSuccessChance(selectedSource, selectedTarget, rollSourceQuantity, rollTargetQuantity, currentGoldBet);
         lastRollWon = UnityEngine.Random.value <= chance;
 
         // Build Roulette Reel
@@ -474,11 +483,11 @@ public sealed class UpgraderBehaviour : MonoBehaviour
             {
                 if (lastRollWon)
                 {
-                    rouletteReel.Add(new RouletteCard(selectedTarget, false));
+                    rouletteReel.Add(new RouletteCard(selectedTarget, false, rollTargetQuantity));
                 }
                 else
                 {
-                    rouletteReel.Add(new RouletteCard(selectedSource, true)); // destroyed card
+                    rouletteReel.Add(new RouletteCard(selectedSource, true, rollSourceQuantity)); // destroyed card
                 }
             }
             else
@@ -486,7 +495,7 @@ public sealed class UpgraderBehaviour : MonoBehaviour
                 ItemData randItem = allChestPassives.Count > 0
                     ? allChestPassives[UnityEngine.Random.Range(0, allChestPassives.Count)]
                     : selectedTarget;
-                rouletteReel.Add(new RouletteCard(randItem, false));
+                rouletteReel.Add(new RouletteCard(randItem, false, 1));
             }
         }
 
@@ -503,7 +512,7 @@ public sealed class UpgraderBehaviour : MonoBehaviour
         hasFinishedRoll = false;
         lastTickCardIndex = -1;
         outcomeMessage = "Рулетка вращается...";
-        Plugin.ModLog?.LogInfo($"Roulette roll started: [{selectedSource.GetName()}] -> [{selectedTarget.GetName()}], Chance: {chance * 100f:F1}%, Bet: {currentGoldBet}g. Won: {lastRollWon}.");
+        Plugin.ModLog?.LogInfo($"Roulette roll started: [{selectedSource.GetName()} x{rollSourceQuantity}] -> [{selectedTarget.GetName()} x{rollTargetQuantity}], Chance: {chance * 100f:F1}%, Bet: {currentGoldBet}g. Won: {lastRollWon}.");
     }
 
     private void FinalizeRoll()
@@ -515,8 +524,14 @@ public sealed class UpgraderBehaviour : MonoBehaviour
 
         if (lastRollWon)
         {
-            inv.itemInventory.RemoveItem(selectedSource.eItem, false);
-            inv.itemInventory.AddItem(selectedTarget.eItem);
+            for (int i = 0; i < rollSourceQuantity; i++)
+            {
+                inv.itemInventory.RemoveItem(selectedSource.eItem, false);
+            }
+            for (int i = 0; i < rollTargetQuantity; i++)
+            {
+                inv.itemInventory.AddItem(selectedTarget.eItem);
+            }
             PlayOutcomeSound(true);
 
             string goldRewardText = string.Empty;
@@ -533,17 +548,27 @@ public sealed class UpgraderBehaviour : MonoBehaviour
                 catch { }
             }
 
-            outcomeMessage = $"УСПЕХ! [{selectedSource.GetName()}] улучшен до [{selectedTarget.GetName()}]!" + goldRewardText;
-            Plugin.ModLog?.LogInfo($"Roulette Result: WIN. Replaced [{selectedSource.GetName()}] with [{selectedTarget.GetName()}]. Gold returned: {currentGoldBet * 1.5f:F0}.");
+            if (selectedSource.eItem == selectedTarget.eItem)
+            {
+                outcomeMessage = $"УСПЕХ! [{selectedTarget.GetName()}] умножен с {rollSourceQuantity}x до {rollTargetQuantity}x!" + goldRewardText;
+            }
+            else
+            {
+                outcomeMessage = $"УСПЕХ! Получено {rollTargetQuantity}x [{selectedTarget.GetName()}] (потрачено {rollSourceQuantity}x [{selectedSource.GetName()}])!" + goldRewardText;
+            }
+            Plugin.ModLog?.LogInfo($"Roulette Result: WIN. Transmuted {rollSourceQuantity}x [{selectedSource.GetName()}] into {rollTargetQuantity}x [{selectedTarget.GetName()}]. Gold returned: {currentGoldBet * 1.5f:F0}.");
         }
         else
         {
-            inv.itemInventory.RemoveItem(selectedSource.eItem, true);
+            for (int i = 0; i < rollSourceQuantity; i++)
+            {
+                inv.itemInventory.RemoveItem(selectedSource.eItem, true);
+            }
             PlayOutcomeSound(false);
 
             string goldLostText = currentGoldBet > 0 ? $"  Ставка {currentGoldBet} 🪙 сгорела." : string.Empty;
-            outcomeMessage = $"ПРОВАЛ! [{selectedSource.GetName()}] сгорел и был уничтожен!" + goldLostText;
-            Plugin.ModLog?.LogInfo($"Roulette Result: LOSS. Destroyed [{selectedSource.GetName()}]. Staked gold: {currentGoldBet}.");
+            outcomeMessage = $"ПРОВАЛ! {rollSourceQuantity}x [{selectedSource.GetName()}] сгорело и уничтожено!" + goldLostText;
+            Plugin.ModLog?.LogInfo($"Roulette Result: LOSS. Destroyed {rollSourceQuantity}x [{selectedSource.GetName()}]. Staked gold: {currentGoldBet}.");
         }
 
         RefreshLists();
@@ -778,7 +803,10 @@ public sealed class UpgraderBehaviour : MonoBehaviour
             ItemData it = list[i];
             if (it == null) continue;
             if (!isSource && selectedSource != null && it.eItem == selectedSource.eItem)
-                continue; // Cannot gamble item into itself
+            {
+                if (UpgraderGambleLogic.GetMaxAllowedQuantity(it) <= 1)
+                    continue; // Unique 1-copy items cannot be multiplied
+            }
 
             EItemRarity effectiveRarity = UpgraderConfig.UseDynamicRarity.Value
                 ? UpgraderGambleLogic.GetDynamicRarity(it)
@@ -816,12 +844,32 @@ public sealed class UpgraderBehaviour : MonoBehaviour
                 if (isSource)
                 {
                     selectedSource = it;
+                    sourceQuantity = 1;
                     if (selectedTarget != null && selectedTarget.eItem == it.eItem)
-                        selectedTarget = null;
+                    {
+                        int maxQty = UpgraderGambleLogic.GetMaxAllowedQuantity(it);
+                        if (maxQty > 1)
+                        {
+                            targetQuantity = Mathf.Clamp(Mathf.Max(targetQuantity, sourceQuantity + 1), 2, maxQty);
+                        }
+                        else
+                        {
+                            selectedTarget = null;
+                        }
+                    }
                 }
                 else
                 {
                     selectedTarget = it;
+                    int maxQty = UpgraderGambleLogic.GetMaxAllowedQuantity(it);
+                    if (selectedSource != null && selectedSource.eItem == it.eItem)
+                    {
+                        targetQuantity = Mathf.Clamp(Mathf.Max(targetQuantity, sourceQuantity + 1), 2, maxQty);
+                    }
+                    else
+                    {
+                        targetQuantity = Mathf.Clamp(targetQuantity, 1, maxQty);
+                    }
                 }
             }
 
@@ -972,9 +1020,13 @@ public sealed class UpgraderBehaviour : MonoBehaviour
         if (currentGoldBet > maxBetAllowed)
             currentGoldBet = maxBetAllowed;
 
-        bool canRoll = selectedSource != null && selectedTarget != null && selectedSource.eItem != selectedTarget.eItem;
-        float baseChance = canRoll ? UpgraderGambleLogic.CalculateSuccessChance(selectedSource, selectedTarget, 0) : 0f;
-        float finalChance = canRoll ? UpgraderGambleLogic.CalculateSuccessChance(selectedSource, selectedTarget, currentGoldBet) : 0f;
+        int ownedSource = inv != null && inv.itemInventory != null && selectedSource != null ? inv.itemInventory.GetAmount(selectedSource.eItem) : 0;
+        bool canRoll = selectedSource != null && selectedTarget != null
+            && sourceQuantity <= ownedSource
+            && (selectedSource.eItem != selectedTarget.eItem || targetQuantity > sourceQuantity);
+
+        float baseChance = canRoll ? UpgraderGambleLogic.CalculateSuccessChance(selectedSource, selectedTarget, sourceQuantity, targetQuantity, 0) : 0f;
+        float finalChance = canRoll ? UpgraderGambleLogic.CalculateSuccessChance(selectedSource, selectedTarget, sourceQuantity, targetQuantity, currentGoldBet) : 0f;
         float goldBonusChance = finalChance - baseChance;
 
         // Title
@@ -997,24 +1049,37 @@ public sealed class UpgraderBehaviour : MonoBehaviour
             DrawRect(barFill, chanceColor);
 
             // Ratio and effect calculation details
-            float sVal = UpgraderGambleLogic.GetItemValue(selectedSource);
-            float tVal = UpgraderGambleLogic.GetItemValue(selectedTarget);
+            float sVal = UpgraderGambleLogic.GetItemValue(selectedSource) * sourceQuantity;
+            float tVal = UpgraderGambleLogic.GetItemValue(selectedTarget) * targetQuantity;
             float sEff = UpgraderGambleLogic.GetItemEffectScore(selectedSource);
             float tEff = UpgraderGambleLogic.GetItemEffectScore(selectedTarget);
             string sRank = UpgraderGambleLogic.GetEffectRankDisplayName(sEff).Split(' ')[0];
             string tRank = UpgraderGambleLogic.GetEffectRankDisplayName(tEff).Split(' ')[0];
 
+            string qtyComparison = (sourceQuantity > 1 || targetQuantity > 1)
+                ? $"[{sourceQuantity}x] → [{targetQuantity}x]  •  "
+                : string.Empty;
+
             GUI.Label(new Rect(centerRect.x, centerRect.y + 72f, centerRect.width, 18f),
-                $"Сила: {sEff:F0} [{sRank}] → {tEff:F0} [{tRank}]  •  Ценность: {sVal:F0} → {tVal:F0} (x{UpgraderConfig.SourceValueMultiplier.Value:F2})",
+                $"{qtyComparison}Сила: {sEff:F0} [{sRank}] → {tEff:F0} [{tRank}]  •  Ценность: {sVal:F0} → {tVal:F0} (x{UpgraderConfig.SourceValueMultiplier.Value:F2})",
                 centerSubtitleStyle ?? subtitleStyle);
         }
         else
         {
-            string selectHint = selectedSource == null
-                ? "← Выберите исходный предмет слева"
-                : "Выберите целевой предмет справа →";
+            string selectHint;
+            if (selectedSource == null)
+                selectHint = "← Выберите исходный предмет слева";
+            else if (selectedTarget == null)
+                selectHint = "Выберите целевой предмет справа →";
+            else if (selectedSource.eItem == selectedTarget.eItem && targetQuantity <= sourceQuantity)
+                selectHint = $"Для того же предмета цель должна быть от {sourceQuantity + 1} шт.";
+            else if (sourceQuantity > ownedSource)
+                selectHint = $"Недостаточно предметов в наличии (есть {ownedSource} шт.)";
+            else
+                selectHint = "Шанс рассчитается автоматически";
+
             GUI.Label(new Rect(centerRect.x, centerRect.y + 36f, centerRect.width, 22f), selectHint, centerSubtitleStyle ?? subtitleStyle);
-            GUI.Label(new Rect(centerRect.x, centerRect.y + 58f, centerRect.width, 18f), "Шанс рассчитается по динамической ценности и силе эффектов", centerSubtitleStyle ?? subtitleStyle);
+            GUI.Label(new Rect(centerRect.x, centerRect.y + 58f, centerRect.width, 18f), "Шанс зависит от соотношения ценности и количества", centerSubtitleStyle ?? subtitleStyle);
         }
 
         // Gold Betting Controls
@@ -1060,9 +1125,28 @@ public sealed class UpgraderBehaviour : MonoBehaviour
         float btnY = centerRect.y + centerRect.height - 48f;
         Rect spinBtnRect = new Rect(centerRect.x + 20f, btnY, centerRect.width - 40f, 42f);
 
-        string spinText = canRoll
-            ? (currentGoldBet > 0 ? $"ЗАПУСТИТЬ (СТАВКА {currentGoldBet} 🪙)" : "ЗАПУСТИТЬ РУЛЕТКУ")
-            : "ВЫБЕРИТЕ ПРЕДМЕТЫ";
+        string spinText;
+        if (!canRoll)
+        {
+            if (selectedSource == null || selectedTarget == null)
+                spinText = "ВЫБЕРИТЕ ПРЕДМЕТЫ";
+            else if (selectedSource.eItem == selectedTarget.eItem && targetQuantity <= sourceQuantity)
+                spinText = $"УВЕЛИЧЬТЕ ЦЕЛЬ (ОТ {sourceQuantity + 1} ШТ.)";
+            else if (sourceQuantity > ownedSource)
+                spinText = "НЕДОСТАТОЧНО ПРЕДМЕТОВ";
+            else
+                spinText = "ВЫБЕРИТЕ ПРЕДМЕТЫ";
+        }
+        else
+        {
+            string betInfo = currentGoldBet > 0 ? $" (СТАВКА {currentGoldBet} 🪙)" : string.Empty;
+            if (selectedSource.eItem == selectedTarget.eItem)
+                spinText = $"УМНОЖИТЬ: {sourceQuantity}x → {targetQuantity}x{betInfo}";
+            else if (sourceQuantity > 1 || targetQuantity > 1)
+                spinText = $"ЗАПУСТИТЬ: {sourceQuantity}x → {targetQuantity}x{betInfo}";
+            else
+                spinText = $"ЗАПУСТИТЬ РУЛЕТКУ{betInfo}";
+        }
 
         GUI.enabled = canRoll;
         if (GUI.Button(spinBtnRect, spinText, buttonPrimaryStyle))
@@ -1119,8 +1203,123 @@ public sealed class UpgraderBehaviour : MonoBehaviour
             GUI.Label(new Rect(rect.x + 64f, rect.y + 65f, rect.width - 74f, 16f), $"Ранг эффекта: {effRank} (сила {effScore:F0})", subtitleStyle);
             GUI.color = Color.white;
 
+            // Quantity Selector Row
+            float qtyY = rect.y + 83f;
+            float qtyH = 24f;
+            Rect qtyRowRect = new Rect(rect.x + 10f, qtyY, rect.width - 20f, qtyH);
+            DrawPanel(qtyRowRect, new Color(0.10f, 0.12f, 0.17f, 0.9f), new Color(0.25f, 0.32f, 0.44f, 0.7f), 1);
+
+            if (isSource)
+            {
+                PlayerInventory inv = GetCurrentPlayerInventory();
+                int ownedCount = inv != null && inv.itemInventory != null ? inv.itemInventory.GetAmount(item.eItem) : 0;
+                if (sourceQuantity > ownedCount) sourceQuantity = Mathf.Max(1, ownedCount);
+
+                if (ownedCount <= 1)
+                {
+                    GUI.Label(new Rect(qtyRowRect.x + 8f, qtyRowRect.y + 3f, qtyRowRect.width - 16f, 18f), $"Ставка: 1 шт. (в наличии: {ownedCount})", subtitleStyle);
+                }
+                else
+                {
+                    GUI.Label(new Rect(qtyRowRect.x + 6f, qtyRowRect.y + 3f, 48f, 18f), "Ставка:", subtitleStyle);
+
+                    float btnX = qtyRowRect.x + 56f;
+                    if (GUI.Button(new Rect(btnX, qtyRowRect.y + 2f, 22f, 20f), "-", tabButtonStyle))
+                    {
+                        sourceQuantity = Mathf.Max(1, sourceQuantity - 1);
+                        if (selectedTarget != null && selectedTarget.eItem == item.eItem && targetQuantity <= sourceQuantity)
+                            targetQuantity = Mathf.Min(UpgraderGambleLogic.GetMaxAllowedQuantity(item), sourceQuantity + 1);
+                    }
+
+                    GUI.color = new Color(1f, 0.85f, 0.35f);
+                    GUI.Label(new Rect(btnX + 24f, qtyRowRect.y + 3f, 42f, 18f), $"{sourceQuantity} шт.", badgeStyle);
+                    GUI.color = Color.white;
+
+                    if (GUI.Button(new Rect(btnX + 68f, qtyRowRect.y + 2f, 22f, 20f), "+", tabButtonStyle))
+                    {
+                        sourceQuantity = Mathf.Min(ownedCount, sourceQuantity + 1);
+                        if (selectedTarget != null && selectedTarget.eItem == item.eItem && targetQuantity <= sourceQuantity)
+                            targetQuantity = Mathf.Min(UpgraderGambleLogic.GetMaxAllowedQuantity(item), sourceQuantity + 1);
+                    }
+
+                    if (GUI.Button(new Rect(btnX + 96f, qtyRowRect.y + 2f, 44f, 20f), "МАКС", sourceQuantity == ownedCount ? tabButtonActiveStyle : tabButtonStyle))
+                    {
+                        sourceQuantity = ownedCount;
+                        if (selectedTarget != null && selectedTarget.eItem == item.eItem && targetQuantity <= sourceQuantity)
+                            targetQuantity = Mathf.Min(UpgraderGambleLogic.GetMaxAllowedQuantity(item), sourceQuantity + 1);
+                    }
+
+                    GUI.Label(new Rect(btnX + 144f, qtyRowRect.y + 3f, qtyRowRect.width - (btnX + 144f - qtyRowRect.x), 18f), $"из {ownedCount}", subtitleStyle);
+                }
+            }
+            else
+            {
+                int maxAllowed = UpgraderGambleLogic.GetMaxAllowedQuantity(item);
+                int minAllowed = (selectedSource != null && selectedSource.eItem == item.eItem)
+                    ? sourceQuantity + 1
+                    : 1;
+
+                if (targetQuantity < minAllowed) targetQuantity = minAllowed;
+                if (targetQuantity > maxAllowed) targetQuantity = maxAllowed;
+
+                if (maxAllowed <= 1)
+                {
+                    GUI.Label(new Rect(qtyRowRect.x + 8f, qtyRowRect.y + 3f, qtyRowRect.width - 16f, 18f), "Цель: 1 шт. (уникальный предмет)", subtitleStyle);
+                }
+                else
+                {
+                    GUI.Label(new Rect(qtyRowRect.x + 6f, qtyRowRect.y + 3f, 40f, 18f), "Цель:", subtitleStyle);
+
+                    float btnX = qtyRowRect.x + 46f;
+                    if (GUI.Button(new Rect(btnX, qtyRowRect.y + 2f, 22f, 20f), "-", tabButtonStyle))
+                    {
+                        targetQuantity = Mathf.Max(minAllowed, targetQuantity - 1);
+                    }
+
+                    GUI.color = new Color(0.4f, 0.9f, 1f);
+                    GUI.Label(new Rect(btnX + 24f, qtyRowRect.y + 3f, 42f, 18f), $"{targetQuantity} шт.", badgeStyle);
+                    GUI.color = Color.white;
+
+                    if (GUI.Button(new Rect(btnX + 68f, qtyRowRect.y + 2f, 22f, 20f), "+", tabButtonStyle))
+                    {
+                        targetQuantity = Mathf.Min(maxAllowed, targetQuantity + 1);
+                    }
+
+                    // Quick multipliers
+                    float presetX = btnX + 94f;
+                    int p2 = (selectedSource != null && selectedSource.eItem == item.eItem) ? sourceQuantity * 2 : 2;
+                    int p5 = (selectedSource != null && selectedSource.eItem == item.eItem) ? sourceQuantity * 5 : 5;
+                    int p10 = (selectedSource != null && selectedSource.eItem == item.eItem) ? sourceQuantity * 10 : 10;
+
+                    if (maxAllowed >= p2 && p2 >= minAllowed)
+                    {
+                        if (GUI.Button(new Rect(presetX, qtyRowRect.y + 2f, 32f, 20f), $"{p2}x", targetQuantity == p2 ? tabButtonActiveStyle : tabButtonStyle))
+                            targetQuantity = p2;
+                        presetX += 34f;
+                    }
+                    if (maxAllowed >= p5 && p5 >= minAllowed)
+                    {
+                        if (GUI.Button(new Rect(presetX, qtyRowRect.y + 2f, 32f, 20f), $"{p5}x", targetQuantity == p5 ? tabButtonActiveStyle : tabButtonStyle))
+                            targetQuantity = p5;
+                        presetX += 34f;
+                    }
+                    if (maxAllowed >= p10 && p10 >= minAllowed)
+                    {
+                        if (GUI.Button(new Rect(presetX, qtyRowRect.y + 2f, 36f, 20f), $"{p10}x", targetQuantity == p10 ? tabButtonActiveStyle : tabButtonStyle))
+                            targetQuantity = p10;
+                        presetX += 38f;
+                    }
+                    if (maxAllowed > p10 && maxAllowed >= minAllowed)
+                    {
+                        if (GUI.Button(new Rect(presetX, qtyRowRect.y + 2f, 44f, 20f), "МАКС", targetQuantity == maxAllowed ? tabButtonActiveStyle : tabButtonStyle))
+                            targetQuantity = maxAllowed;
+                    }
+                }
+            }
+
             // Description Box
-            Rect descRect = new Rect(rect.x + 10f, rect.y + 85f, rect.width - 20f, rect.height - 95f);
+            float descY = qtyY + qtyH + 4f;
+            Rect descRect = new Rect(rect.x + 10f, descY, rect.width - 20f, rect.height - (descY - rect.y) - 8f);
             DrawPanel(descRect, new Color(0.05f, 0.06f, 0.08f, 0.75f), new Color(0.16f, 0.19f, 0.25f, 0.6f), 1);
 
             string desc = item.GetDescription();
@@ -1189,7 +1388,8 @@ public sealed class UpgraderBehaviour : MonoBehaviour
             {
                 GUI.color = new Color(1f, 0.3f, 0.3f);
                 GUI.Label(new Rect(cardRect.x, cardRect.y + 24f, cardRect.width, 36f), "✕", titleStyle);
-                GUI.Label(new Rect(cardRect.x + 4f, cardRect.y + 70f, cardRect.width - 8f, 32f), "СГОРЕЛ", headerStyle);
+                string failTxt = card.Quantity > 1 ? $"СГОРЕЛО {card.Quantity}x" : "СГОРЕЛ";
+                GUI.Label(new Rect(cardRect.x + 4f, cardRect.y + 70f, cardRect.width - 8f, 32f), failTxt, headerStyle);
                 GUI.color = Color.white;
             }
             else if (card.Item != null)
@@ -1199,8 +1399,17 @@ public sealed class UpgraderBehaviour : MonoBehaviour
                 {
                     GUI.DrawTexture(new Rect(cardRect.x + (cardRect.width - 48f) * 0.5f, cardRect.y + 14f, 48f, 48f), icon);
                 }
+
+                if (card.Quantity > 1)
+                {
+                    Rect qtyBadge = new Rect(cardRect.x + cardRect.width - 44f, cardRect.y + 6f, 38f, 20f);
+                    DrawPanel(qtyBadge, new Color(0.12f, 0.22f, 0.38f, 0.95f), new Color(0.35f, 0.85f, 1f, 0.9f), 1);
+                    GUI.Label(qtyBadge, $"x{card.Quantity}", badgeStyle);
+                }
+
                 GUI.color = cardBorder;
-                GUI.Label(new Rect(cardRect.x + 4f, cardRect.y + 74f, cardRect.width - 8f, 22f), card.Item.GetName(), headerStyle);
+                string cardName = card.Quantity > 1 ? $"{card.Item.GetName()} x{card.Quantity}" : card.Item.GetName();
+                GUI.Label(new Rect(cardRect.x + 4f, cardRect.y + 74f, cardRect.width - 8f, 22f), cardName, headerStyle);
                 GUI.color = Color.white;
                 GUI.Label(new Rect(cardRect.x + 4f, cardRect.y + 98f, cardRect.width - 8f, 18f), UpgraderGambleLogic.GetRarityDisplayName(card.Item.rarity), subtitleStyle);
             }
@@ -1237,6 +1446,8 @@ public sealed class UpgraderBehaviour : MonoBehaviour
                 selectedSource = null;
                 selectedTarget = null;
                 currentGoldBet = 0;
+                sourceQuantity = 1;
+                targetQuantity = 1;
             }
 
             if (GUI.Button(new Rect(btnX + btnW + 24f, btnTop, btnW, btnH), "ЗАКРЫТЬ [ESC]", buttonSecondaryStyle))
@@ -1377,11 +1588,13 @@ public sealed class UpgraderBehaviour : MonoBehaviour
     {
         public readonly ItemData Item;
         public readonly bool IsFailure;
+        public readonly int Quantity;
 
-        public RouletteCard(ItemData item, bool isFailure)
+        public RouletteCard(ItemData item, bool isFailure, int quantity = 1)
         {
             Item = item;
             IsFailure = isFailure;
+            Quantity = quantity;
         }
     }
 }

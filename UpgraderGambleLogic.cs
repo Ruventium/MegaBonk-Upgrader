@@ -201,9 +201,29 @@ public static class UpgraderGambleLogic
         return EItemRarity.Common;
     }
 
-    public static float CalculateSuccessChance(ItemData source, ItemData target, int goldBet = 0)
+    public static int GetMaxAllowedQuantity(ItemData item)
+    {
+        if (item == null) return 1;
+
+        if (item.maxAmountPerRun == 1 || item.maxAmount == 1)
+            return 1;
+
+        int configMax = UpgraderConfig.MaxTargetQuantity != null ? UpgraderConfig.MaxTargetQuantity.Value : 50;
+        int limit = configMax;
+
+        if (item.maxAmount > 1 && item.maxAmount < limit)
+            limit = item.maxAmount;
+        if (item.maxAmountPerRun > 1 && item.maxAmountPerRun < limit)
+            limit = item.maxAmountPerRun;
+
+        return Mathf.Max(1, limit);
+    }
+
+    public static float CalculateSuccessChance(ItemData source, ItemData target, int sourceCount = 1, int targetCount = 1, int goldBet = 0)
     {
         if (source == null || target == null) return 0f;
+        if (sourceCount < 1) sourceCount = 1;
+        if (targetCount < 1) targetCount = 1;
 
         float min = Mathf.Clamp01(UpgraderConfig.MinimumChance.Value);
         float max = Mathf.Clamp01(UpgraderConfig.MaximumChance.Value);
@@ -212,8 +232,8 @@ public static class UpgraderGambleLogic
             (min, max) = (max, min);
         }
 
-        float sourceVal = GetItemValue(source);
-        float targetVal = GetItemValue(target);
+        float sourceVal = GetItemValue(source) * sourceCount;
+        float targetVal = GetItemValue(target) * targetCount;
 
         if (sourceVal <= 0f || targetVal <= 0f) return min;
 

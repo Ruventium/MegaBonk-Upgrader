@@ -17,6 +17,7 @@ public static class UpgraderConfig
     public static ConfigEntry<float> RollDuration { get; private set; }
     public static ConfigEntry<float> TickVolumeMultiplier { get; private set; }
     public static ConfigEntry<bool> UseDynamicRarity { get; private set; }
+    public static ConfigEntry<int> MaxTargetQuantity { get; private set; }
     public static ConfigEntry<bool> EnableGoldBetting { get; private set; }
     public static ConfigEntry<float> MaxGoldChanceBonus { get; private set; }
     public static ConfigEntry<int> MaxGoldBet { get; private set; }
@@ -101,6 +102,13 @@ public static class UpgraderConfig
             "UseDynamicRarity",
             true,
             "Calculate real dynamic item value and rarity based on scarcity (maxAmountPerRun) and caps."
+        );
+
+        MaxTargetQuantity = config.Bind(
+            "Roll",
+            "MaxTargetQuantity",
+            50,
+            new ConfigDescription("Maximum quantity of items a player can gamble for in a single roll (for stackable items).", new AcceptableValueRange<int>(2, 100))
         );
 
         EnableGoldBetting = config.Bind(
